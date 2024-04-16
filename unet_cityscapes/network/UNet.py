@@ -6,8 +6,7 @@ import torch.nn.functional as F
 from torchmetrics import JaccardIndex
 from torchmetrics import Accuracy
 import wandb
-import json
-logging.basicConfig(level = logging.INFO,  format ='%(asctime)s - %(levelname)s - %(message)s')
+
 
 class UNet(nn.Module):
     def __init__(self, in_channels, out_channels):
@@ -75,7 +74,7 @@ class UNet(nn.Module):
             self.accuracy_metric = Accuracy(task="multiclass", num_classes=self.out_channels).to(self.device)
             self.accuracy_metric_per_class = Accuracy(task="multiclass", num_classes=self.out_channels, average=None).to(self.device)
             self.wandb_run = wandb_run
-            logging.info("Model compiled with learning rate: {},device: {} and loss function: {}".format(learning_rate,self.device, loss_fn))
+            print("Model compiled with learning rate: {},device: {} and loss function: {}".format(learning_rate,self.device, loss_fn))
     
     def eval(self,input):
         self.train(False)
@@ -152,7 +151,7 @@ class UNet(nn.Module):
     
     def fit(self,
             epochs: int):
-        logging.info("Training started with {} epochs.".format(epochs))
+        print("Training started with {} epochs.".format(epochs))
         self.train(True)
         for epoch in range(epochs):
             avg_train_loss = self.__train_one_epoch()
@@ -169,23 +168,23 @@ class UNet(nn.Module):
                 "epoch": epoch
             }
             self.__log_wandb({**train_metrics, **val_metrics})
-            logging.info("Epoch: {} Train Loss: {} Validation Loss: {}, Validation mIoU: {}, Validation mAcurracy: {}".format(epoch, avg_train_loss, avg_validation_loss,avg_validation_iou,avg_validation_accuracy))
+            print("Epoch: {} Train Loss: {} Validation Loss: {}, Validation mIoU: {}, Validation mAcurracy: {}".format(epoch, avg_train_loss, avg_validation_loss,avg_validation_iou,avg_validation_accuracy))
             if epoch == epochs-1:
                 iou_per_class, accuracy_per_class = self.__eval_model_per_class()
-                logging.info("Validation mIoU per class:\n {}".format(iou_per_class))
-                logging.info("Validation mAccuracy per class:\n  {}".format(accuracy_per_class))
+                print("Validation mIoU per class:\n {}".format(iou_per_class))
+                print("Validation mAccuracy per class:\n  {}".format(accuracy_per_class))
                 self.__log_wandb({"iou_per_class": iou_per_class, "accuracy_per_class": accuracy_per_class})
             
     
     def save(self,path,model_name):
         torch.save(self.state_dict(), path)
-        logging.info("Model saved at {}".format(path))
+        print("Model saved at {}".format(path))
         if self.wandb_run:
             artifact = wandb.Artifact(model_name, type='model')
             artifact.add_file(path)
             self.wandb_run.log_artifact(artifact)
             self.wandb_run.finish()
-            logging.info("Model saved in wandb as artifact")
+            print("Model saved in wandb as artifact")
     
             
         
