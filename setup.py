@@ -5,7 +5,7 @@ setup(
     name='unet_cityscapes',
     version='0.0.0',
     description='U-Net for Cityscapes dataset',
-    author='Jakub Karpiński & Andrzej Sawicki',
+    author='Jakub Karpiński',
     packages=setuptools.find_packages(),
     zip_safe=False,
 )
