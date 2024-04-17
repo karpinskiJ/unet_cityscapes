@@ -117,7 +117,7 @@ class UNet(nn.Module):
                 loss = self.loss_fn(outputs, labels)
                 
                 validation_loss += loss.item()
-                validation_iou, validation_accuracy = self._calc_metrics(outputs, labels)
+                validation_iou, validation_accuracy += self._calc_metrics(outputs, labels)
             
             val_metrics = [validation_loss,validation_iou,validation_accuracy]
 
