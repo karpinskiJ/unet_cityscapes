@@ -8,6 +8,7 @@ from torchmetrics import Accuracy
 import wandb
 
 
+
 class UNet(nn.Module):
     def __init__(self, in_channels, out_channels):
         super().__init__()
@@ -32,8 +33,6 @@ class UNet(nn.Module):
         self.right_conv_1 = DoubleConv2D(128, 64)
         self.out = OutLayer(64, out_channels)
 
-
-
     def forward(self, input):
         left_conv_1 = self.left_conv_1(input)
         left_pool_1 = self.left_pool_1(left_conv_1)
@@ -57,33 +56,35 @@ class UNet(nn.Module):
         cat_1 = torch.cat((right_up_1, left_conv_1), dim=1)
         right_conv_1 = self.right_conv_1(cat_1)
         return self.out(right_conv_1)
-    
+
     def compile(self,
                 learning_rate,
                 loss_fn,
                 training_loader,
                 validation_loader,
                 wandb_run=None):
-            self.optimizer = torch.optim.Adam(self.parameters(), lr=learning_rate)
-            self.loss_fn = loss_fn
-            self.training_loader = training_loader
-            self.validation_loader = validation_loader
-            self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-            self.iou_metric = JaccardIndex(task="multiclass", num_classes=self.out_channels).to(self.device)
-            self.iou_per_class_metric = JaccardIndex(task="multiclass", num_classes=self.out_channels, average=None).to(self.device)
-            self.accuracy_metric = Accuracy(task="multiclass", num_classes=self.out_channels).to(self.device)
-            self.accuracy_metric_per_class = Accuracy(task="multiclass", num_classes=self.out_channels, average=None).to(self.device)
-            self.wandb_run = wandb_run
-            print("Model compiled with learning rate: {},device: {} and loss function: {}".format(learning_rate,self.device, loss_fn))
-    
-    def eval(self,input):
+        self.optimizer = torch.optim.Adam(self.parameters(), lr=learning_rate)
+        self.loss_fn = loss_fn
+        self.training_loader = training_loader
+        self.validation_loader = validation_loader
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.iou_metric = JaccardIndex(task="multiclass", num_classes=self.out_channels).to(self.device)
+        self.iou_per_class_metric = JaccardIndex(task="multiclass", num_classes=self.out_channels, average=None).to(
+            self.device)
+        self.accuracy_metric = Accuracy(task="multiclass", num_classes=self.out_channels).to(self.device)
+        self.accuracy_metric_per_class = Accuracy(task="multiclass", num_classes=self.out_channels, average=None).to(
+            self.device)
+        self.wandb_run = wandb_run
+        print(
+            "Model compiled with learning rate: {},device: {} and loss function: {}".format(learning_rate, self.device,
+                                                                                            loss_fn))
+
+    def eval(self, input):
         self.train(False)
         with torch.no_grad():
             prediction = self.forward(input)
             output = F.softmax(prediction, dim=1)
             return torch.argmax(output, dim=1)
-        
-
 
     def __train_one_epoch(self):
         train_loss = 0
@@ -96,16 +97,20 @@ class UNet(nn.Module):
             loss.backward()
             self.optimizer.step()
             train_loss += loss.item()
-        return train_loss/len(self.training_loader)
-    
+            if i % 100 == 0:
+                print("Batch {}/{}: Train loss: {}".format(i, len(self.training_loader), loss))
+        return train_loss / len(self.training_loader)
+
     def _calc_metrics(self, outputs, labels):
-        outputs = torch.argmax(F.softmax(outputs, dim=1),dim=1)
+        outputs = torch.argmax(F.softmax(outputs, dim=1), dim=1)
         return self.iou_metric(outputs, labels), self.accuracy_metric(outputs, labels)
+
     def _calc_metrics_per_class(self, outputs, labels):
-        outputs = torch.argmax(F.softmax(outputs, dim=1),dim=1)
+        outputs = torch.argmax(F.softmax(outputs, dim=1), dim=1)
         return self.iou_per_class_metric(outputs, labels), self.accuracy_metric_per_class(outputs, labels)
-        
+
     def __eval_one_epoch(self):
+        print("Evaluation started")
         validation_loss = 0
         validation_iou = 0
         validation_accuracy = 0
@@ -115,40 +120,43 @@ class UNet(nn.Module):
                 inputs, labels = inputs.to(self.device), labels.to(self.device)
                 outputs = self.forward(inputs)
                 loss = self.loss_fn(outputs, labels)
-                
+
                 validation_loss += loss.item()
-                validation_iou, validation_accuracy += self._calc_metrics(outputs, labels)
-            
-            val_metrics = [validation_loss,validation_iou,validation_accuracy]
+                validation_metrics = self._calc_metrics(outputs, labels)
+                validation_iou += validation_metrics[0]
+                validation_accuracy += validation_metrics[1]
+                val_metrics = [validation_loss, validation_iou, validation_accuracy]
 
+        return [metric / len(self.validation_loader) for metric in val_metrics]
 
-        return  [metric/ len(self.validation_loader) for metric in val_metrics]
-    
     def __eval_model_per_class(self):
-         total_validaiton_iou_per_class = torch.tensor([0.0]*self.out_channels,dtype=torch.float32).to(self.device)
-         total_validation_accuracy_per_class = torch.tensor([0.0]*self.out_channels,dtype=torch.float32).to(self.device)
-         with torch.no_grad():
+        total_validaiton_iou_per_class = torch.tensor([0.0] * self.out_channels, dtype=torch.float32).to(self.device)
+        total_validation_accuracy_per_class = torch.tensor([0.0] * self.out_channels, dtype=torch.float32).to(
+            self.device)
+        with torch.no_grad():
             for i, data in enumerate(self.validation_loader):
                 inputs, labels = data
                 inputs, labels = inputs.to(self.device), labels.to(self.device)
                 outputs = self.forward(inputs)
-           
+
                 validation_iou_per_class, validation_accuracy_per_class = self._calc_metrics_per_class(outputs, labels)
                 total_validaiton_iou_per_class += validation_iou_per_class
                 total_validation_accuracy_per_class += validation_accuracy_per_class
 
-            total_validaiton_iou_per_class = (total_validaiton_iou_per_class/len(self.validation_loader)).cpu().numpy().tolist()
-            total_validation_accuracy_per_class = (total_validation_accuracy_per_class/len(self.validation_loader)).cpu().numpy().tolist()
+            total_validaiton_iou_per_class = (
+                    total_validaiton_iou_per_class / len(self.validation_loader)).cpu().numpy().tolist()
+            total_validation_accuracy_per_class = (
+                    total_validation_accuracy_per_class / len(self.validation_loader)).cpu().numpy().tolist()
 
-            total_validation_accuracy_per_class = dict(zip(range(0,self.out_channels), total_validation_accuracy_per_class ))
-            toal_validation_iou_per_class =  dict(zip(range(0,self.out_channels), total_validaiton_iou_per_class ) )
-            return  toal_validation_iou_per_class, total_validation_accuracy_per_class
-    
+            total_validation_accuracy_per_class = dict(
+                zip(range(0, self.out_channels), total_validation_accuracy_per_class))
+            toal_validation_iou_per_class = dict(zip(range(0, self.out_channels), total_validaiton_iou_per_class))
+            return toal_validation_iou_per_class, total_validation_accuracy_per_class
+
     def __log_wandb(self, metrics):
         if self.wandb_run:
             self.wandb_run.log(metrics)
 
-    
     def fit(self,
             epochs: int):
         print("Training started with {} epochs.".format(epochs))
@@ -168,15 +176,15 @@ class UNet(nn.Module):
                 "epoch": epoch
             }
             self.__log_wandb({**train_metrics, **val_metrics})
-            print("Epoch: {} Train Loss: {} Validation Loss: {}, Validation mIoU: {}, Validation mAcurracy: {}".format(epoch, avg_train_loss, avg_validation_loss,avg_validation_iou,avg_validation_accuracy))
-            if epoch == epochs-1:
+            print("Epoch: {} Train Loss: {} Validation Loss: {}, Validation mIoU: {}, Validation mAcurracy: {}".format(
+                epoch, avg_train_loss, avg_validation_loss, avg_validation_iou, avg_validation_accuracy))
+            if epoch == epochs - 1:
                 iou_per_class, accuracy_per_class = self.__eval_model_per_class()
                 print("Validation mIoU per class:\n {}".format(iou_per_class))
                 print("Validation mAccuracy per class:\n  {}".format(accuracy_per_class))
                 self.__log_wandb({"iou_per_class": iou_per_class, "accuracy_per_class": accuracy_per_class})
-            
-    
-    def save(self,path,model_name):
+
+    def save(self, path, model_name):
         torch.save(self.state_dict(), path)
         print("Model saved at {}".format(path))
         if self.wandb_run:
@@ -185,12 +193,3 @@ class UNet(nn.Module):
             self.wandb_run.log_artifact(artifact)
             self.wandb_run.finish()
             print("Model saved in wandb as artifact")
-    
-            
-        
-
-
-
-
-
-
