@@ -68,18 +68,20 @@ class UNet(nn.Module):
         self.training_loader = training_loader
         self.validation_loader = validation_loader
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        self.iou_metric = JaccardIndex(task="multiclass", num_classes=self.out_channels).to(self.device)
+        self.iou_metric = JaccardIndex(task="multiclass", num_classes=self.out_channels, average="micro").to(
+            self.device)
         self.iou_per_class_metric = JaccardIndex(task="multiclass", num_classes=self.out_channels, average=None).to(
             self.device)
         self.accuracy_metric = Accuracy(task="multiclass", num_classes=self.out_channels).to(self.device)
         self.accuracy_metric_per_class = Accuracy(task="multiclass", num_classes=self.out_channels, average=None).to(
             self.device)
         self.wandb_run = wandb_run
+
         print(
             "Model compiled with learning rate: {},device: {} and loss function: {}".format(learning_rate, self.device,
                                                                                             loss_fn))
 
-    def eval(self, input):
+    def eval_model(self, input):
         self.train(False)
         with torch.no_grad():
             prediction = self.forward(input)
@@ -176,8 +178,11 @@ class UNet(nn.Module):
                 "epoch": epoch
             }
             self.__log_wandb({**train_metrics, **val_metrics})
-            print("Epoch: {} Train Loss: {} Validation Loss: {}, Validation mIoU: {}, Validation mAcurracy: {}".format(
-                epoch, avg_train_loss, avg_validation_loss, avg_validation_iou, avg_validation_accuracy))
+            print(
+                "Epoch: {} LR: {} Train Loss: {} Validation Loss: {}, Validation mIoU: {}, Validation mAcurracy: {}".format(
+                    epoch, self.optimizer.param_groups[0]["lr"], avg_train_loss, avg_validation_loss,
+                    avg_validation_iou,
+                    avg_validation_accuracy))
             if epoch == epochs - 1:
                 iou_per_class, accuracy_per_class = self.__eval_model_per_class()
                 print("Validation mIoU per class:\n {}".format(iou_per_class))
