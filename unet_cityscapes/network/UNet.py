@@ -6,7 +6,7 @@ import torch.nn.functional as F
 from torchmetrics import JaccardIndex
 from torchmetrics import Accuracy
 import wandb
-
+from torch.optim.lr_scheduler import MultiStepLR
 
 
 class UNet(nn.Module):
@@ -160,11 +160,17 @@ class UNet(nn.Module):
             self.wandb_run.log(metrics)
 
     def fit(self,
-            epochs: int):
+            epochs: int,
+            scheduler_step: int = 10,
+            scheduler_gamma: float = 0.1):
         print("Training started with {} epochs.".format(epochs))
+        self.scheduler = MultiStepLR(self.optimizer, milestones=range(scheduler_step, epochs, scheduler_step),
+                                     gamma=scheduler_gamma)
         self.train(True)
         for epoch in range(epochs):
             avg_train_loss = self.__train_one_epoch()
+            self.scheduler.step()
+
             train_metrics = {
                 "train_loss": avg_train_loss,
                 "epoch": epoch
@@ -178,6 +184,7 @@ class UNet(nn.Module):
                 "epoch": epoch
             }
             self.__log_wandb({**train_metrics, **val_metrics})
+
             print(
                 "Epoch: {} LR: {} Train Loss: {} Validation Loss: {}, Validation mIoU: {}, Validation mAcurracy: {}".format(
                     epoch, self.optimizer.param_groups[0]["lr"], avg_train_loss, avg_validation_loss,
