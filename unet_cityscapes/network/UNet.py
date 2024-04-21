@@ -28,6 +28,7 @@ class UNet(nn.Module):
         self.left_dropout_4 = nn.Dropout2d(0.5)
         self.bottom_conv = DoubleConv2D(512, 1024)
         self.right_up_4 = nn.ConvTranspose2d(1024, 512, kernel_size=2, stride=2)
+        self.right_batch_norm_4 = nn.BatchNorm2d(512)
         self.right_dropout_4 = nn.Dropout2d(0.5)
         self.right_conv_4 = DoubleConv2D(1024, 512)
         self.right_up_3 = nn.ConvTranspose2d(512, 256, kernel_size=2, stride=2)
