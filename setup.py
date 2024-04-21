@@ -3,7 +3,7 @@ from setuptools import setup
 
 setup(
     name='unet_cityscapes',
-    version='0.3.0',
+    version='0.4.0',
     description='U-Net for Cityscapes dataset',
     author='Jakub Karpiński',
     packages=setuptools.find_packages(),
