@@ -6,10 +6,10 @@ class DoubleConv2D(nn.Module):
         super().__init__()
         self.double_conv_3x3_with_activation = nn.Sequential(
             nn.Conv2d(in_ch, out_ch, kernel_size=3,padding="same"),
-            nn.BatchNorm2d(out_ch),
+            # nn.BatchNorm2d(out_ch),
             nn.ReLU(),
             nn.Conv2d(out_ch, out_ch, kernel_size=3,padding="same"),
-            nn.BatchNorm2d(out_ch),
+            # nn.BatchNorm2d(out_ch),
             nn.ReLU()
         )
 
